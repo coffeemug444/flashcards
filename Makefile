@@ -21,9 +21,6 @@ $(BACKENDS_ODIR)/%.o: $(BACKENDS_DIR)/%.cpp
 	mkdir -p $(BACKENDS_ODIR)
 	c++ -c -o $@ $< -I$(IMGUI_DIR)
 
-
-
-
 .PHONY: clean
 clean:
 	rm -rf main $(IMGUI_ODIR) $(BACKENDS_ODIR)
