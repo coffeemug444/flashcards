@@ -19,7 +19,8 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
-
+#include <algorithm>
+#include <random>
 
 namespace fs = std::filesystem;
 
@@ -37,23 +38,18 @@ typedef enum FlashcardField {
     PINYIN = 4
 } FlashcardField;
 
+typedef enum CardStatus {
+    CORRECT,
+    INCORRECT,
+    UNDECIDED
+} CardStatus;
+
 typedef struct Flashcard {
     std::string english;
     std::string chinese;
     std::string pinyin;
-    bool correct = false;
+    CardStatus status = UNDECIDED;
 } Flashcard;
-
-Flashcard testcard1 = {
-    "english 1",
-    "chinese 1",
-    "pinyin 1"
-};
-Flashcard testcard2 = {
-    "english 2",
-    "chinese 2",
-    "pinyin 2"
-};
 
 SDL_Window* window;
 SDL_GLContext gl_context;
@@ -62,8 +58,10 @@ ImGuiIO* io;
 Page currentPage = LESSON_SELECTION;
 std::vector<std::vector<Flashcard>> lessons;
 int fields = 0;
-std::vector<Flashcard> flashcards;
+std::vector<Flashcard> active_set;
+std::vector<Flashcard> inactive_set;
 int currentCard = 0;
+auto rng = std::default_random_engine{std::random_device()()};
 
 ImFont* en_large;
 ImFont* cn_large;
@@ -150,13 +148,15 @@ void showLessonSelection() {
         ImGui::EndTable();
     }
     if(ImGui::Button("Next")) {
-        flashcards.clear();
+        active_set.clear();
+        inactive_set.clear();
         for (int i = 0; i <= lessons.size(); i++) {
             if (selectableLessons[i]) {
-                flashcards.insert(end(flashcards), begin(lessons[i]), end(lessons[i]));
+                active_set.insert(end(active_set), begin(lessons[i]), end(lessons[i]));
             }
         }
-        if (flashcards.size() != 0) {
+        if (active_set.size() != 0) {
+            std::shuffle(begin(active_set), end(active_set), rng);
             currentPage = FLASHCARD_SELECTION;
         }
     }
@@ -190,7 +190,7 @@ void showFlashcard(){
     if(ImGui::Button("Return to menu")) {
         currentPage = LESSON_SELECTION;
     }
-    Flashcard &card = flashcards[currentCard];
+    Flashcard card = active_set.front();
     ImGui::PushFont(cn_large);
     if (fields & ENGLISH) TextCentered(card.english);
     if (fields & PINYIN) TextCentered(card.pinyin);
@@ -199,32 +199,37 @@ void showFlashcard(){
     skipInvisibleFlashcardFields();
     if (ImGui::BeginTable("split", 3)) {
         ImGui::TableNextColumn(); if (ImGui::Button("Previous")) {
-            if (currentCard > 0) {
-                currentCard--;
+            if (inactive_set.size() != 0) {
+                Flashcard prevCard = inactive_set.back();
+                if (prevCard.status = CORRECT) {
+                    prevCard.status = UNDECIDED;
+                }
+                active_set.insert(begin(active_set), prevCard);
+                inactive_set.pop_back();
             }
         }
         ImGui::TableNextColumn(); if(ImGui::Button("Flip")) {
             currentPage = REVEAL_FLASHCARD;
         }
         ImGui::TableNextColumn(); if(ImGui::Button("Next")) {
-            card.correct = true;
-            if (currentCard == flashcards.size() - 1) {
+            if (card.status != INCORRECT) {
+                card.status = CORRECT;
+            }
+            inactive_set.push_back(card);
+            active_set.erase(begin(active_set));
+            if (active_set.size() == 0) {
                 currentPage = SHOW_RESULTS;
-            } else {
-                currentCard++;
             }
         }
         ImGui::EndTable();
     }
 }
 
-
-
 void revealFlashcard() {
     if(ImGui::Button("Return to menu")) {
         currentPage = LESSON_SELECTION;
     }
-    Flashcard &card = flashcards[currentCard];
+    Flashcard card = active_set.front();
     ImGui::PushFont(cn_large);
     TextCentered(card.english);
     TextCentered(card.pinyin);
@@ -232,21 +237,33 @@ void revealFlashcard() {
     ImGui::PopFont();
     if (ImGui::BeginTable("split", 2)) {
         ImGui::TableNextColumn(); if(ImGui::Button("Incorrect")){
-            card.correct = false;
-            if (currentCard == flashcards.size() - 1) {
+            card.status = INCORRECT;
+            active_set.erase(begin(active_set));
+            int num_left = active_set.size();
+            if (num_left <= 3) {
+                active_set.push_back(card);
+            } else {
+                std::uniform_int_distribution<> distr(3, num_left-1);
+                active_set.insert(begin(active_set) + distr(rng), card);
+            }
+
+
+            if (active_set.size() == 0) {
                 currentPage = SHOW_RESULTS;
             } else {
                 currentPage = SHOW_FLASHCARD;
-                currentCard++;
             }
         }
         ImGui::TableNextColumn(); if(ImGui::Button("Correct")){
-            card.correct = true;
-            if (currentCard == flashcards.size() - 1) {
+            if (card.status != INCORRECT) {
+                card.status = CORRECT;
+            }
+            inactive_set.push_back(card);
+            active_set.erase(begin(active_set));
+            if (active_set.size() == 0) {
                 currentPage = SHOW_RESULTS;
             } else {
                 currentPage = SHOW_FLASHCARD;
-                currentCard++;
             }
         }
         ImGui::EndTable();
@@ -255,10 +272,10 @@ void revealFlashcard() {
 
 void showResults() {
     int numCorrect = 0;
-    for (auto& card : flashcards) {
-        numCorrect += card.correct;
+    for (auto& card : inactive_set) {
+        numCorrect += card.status == CORRECT;
     }
-    ImGui::Text("%d/%lu correct", numCorrect, flashcards.size());
+    ImGui::Text("%d/%lu correct", numCorrect, inactive_set.size());
     if (ImGui::BeginTable("split", 2)) {
         ImGui::TableNextColumn(); if(ImGui::Button("Restart lesson")) {
             currentCard = 0;
@@ -316,11 +333,6 @@ int main(int, char**)
     bool open = true;
     while (open)
     {
-        // Poll and handle events (inputs, window resize, etc.)
-        // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
@@ -376,7 +388,6 @@ int main(int, char**)
         glViewport(0, 0, io->DisplaySize.x, io->DisplaySize.y);
         glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
-        //glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound
         ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);
     }
