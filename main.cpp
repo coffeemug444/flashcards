@@ -66,6 +66,61 @@ void cleanup() {
     SDL_Quit();
 }
 
+void showLessonSelection() {
+    static bool wowowo = false;
+    if (ImGui::BeginTable("split", 3))
+    {
+        for (int i = 1; i <= 18; i++) {
+            char lessonText[10];
+            sprintf(lessonText, "Lesson %d", i);
+            ImGui::TableNextColumn(); ImGui::Checkbox(lessonText, &wowowo);
+        }
+        ImGui::EndTable();
+    }
+}
+
+void showFlashcardSelection() {
+    static bool wewewe = false;
+    ImGui::Button("Return to menu");
+    ImGui::Checkbox("English", &wewewe);
+    ImGui::Checkbox("Chinese", &wewewe);
+    ImGui::Checkbox("Pinyin", &wewewe);
+}
+
+void showFlashcard(){
+    ImGui::Button("Return to menu");
+    ImGui::Text("ENGLISH");
+    ImGui::Text("CHINESE");
+    ImGui::Text("PYINYIN");
+    if (ImGui::BeginTable("split", 3)) {
+        ImGui::TableNextColumn(); ImGui::Button("Previous");
+        ImGui::TableNextColumn(); ImGui::Button("Flip");
+        ImGui::TableNextColumn(); ImGui::Button("Next");
+        ImGui::EndTable();
+    }
+}
+
+void revealFlashcard() {
+    ImGui::Button("Return to menu");
+    ImGui::Text("ENGLISH");
+    ImGui::Text("CHINESE");
+    ImGui::Text("PYINYIN");
+    if (ImGui::BeginTable("split", 2)) {
+        ImGui::TableNextColumn(); ImGui::Button("Incorrect");
+        ImGui::TableNextColumn(); ImGui::Button("Correct");
+        ImGui::EndTable();
+    }
+}
+
+void showResults() {
+    ImGui::Text("0/46 correct");
+    if (ImGui::BeginTable("split", 2)) {
+        ImGui::TableNextColumn(); ImGui::Button("Restart lesson");
+        ImGui::TableNextColumn(); ImGui::Button("Back to menu");
+        ImGui::EndTable();
+    }
+}
+
 // Main code
 int main(int, char**)
 {
@@ -91,7 +146,6 @@ int main(int, char**)
     //IM_ASSERT(font != NULL);
 
     // Our state
-    bool show_demo_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // Main loop
@@ -118,11 +172,6 @@ int main(int, char**)
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window) {
-            ImGui::ShowDemoWindow(&show_demo_window);
-        }
-
         {
             static float f = 0.0f;
             static int counter = 0;
@@ -137,18 +186,12 @@ int main(int, char**)
 
             ImGui::Begin("Hello, world!", nullptr, window_flags);     // Create a window called "Hello, world!" and append into it.
 
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+            //showLessonSelection();
+            //showFlashcardSelection();
+            //showFlashcard();
+            //revealFlashcard();
+            showResults();
 
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
             ImGui::End();
         }
 
