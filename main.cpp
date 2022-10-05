@@ -18,6 +18,16 @@ SDL_Window* window;
 SDL_GLContext gl_context;
 ImGuiIO* io;
 
+typedef enum Page {
+    LESSON_SELECTION,
+    FLASHCARD_SELECTION,
+    SHOW_FLASHCARD,
+    REVEAL_FLASHCARD,
+    SHOW_RESULTS
+} Page;
+
+Page currentPage = LESSON_SELECTION;
+
 int setup() {
     // Setup SDL
     // (Some versions of SDL before <2.0.10 appears to have performance/stalling issues on a minority of Windows systems,
@@ -67,7 +77,7 @@ void cleanup() {
 }
 
 void showLessonSelection() {
-    static bool wowowo = false;
+    bool wowowo = false;
     if (ImGui::BeginTable("split", 3))
     {
         for (int i = 1; i <= 18; i++) {
@@ -77,18 +87,28 @@ void showLessonSelection() {
         }
         ImGui::EndTable();
     }
+    if(ImGui::Button("Next")) {
+        currentPage = FLASHCARD_SELECTION;
+    }
 }
 
 void showFlashcardSelection() {
     static bool wewewe = false;
-    ImGui::Button("Return to menu");
+    if(ImGui::Button("Return to menu")) {
+        currentPage = LESSON_SELECTION;
+    }
     ImGui::Checkbox("English", &wewewe);
     ImGui::Checkbox("Chinese", &wewewe);
     ImGui::Checkbox("Pinyin", &wewewe);
+    if(ImGui::Button("Next")) {
+        currentPage = SHOW_FLASHCARD;
+    }
 }
 
 void showFlashcard(){
-    ImGui::Button("Return to menu");
+    if(ImGui::Button("Return to menu")) {
+        currentPage = LESSON_SELECTION;
+    }
     ImGui::Text("ENGLISH");
     ImGui::Text("CHINESE");
     ImGui::Text("PYINYIN");
@@ -101,7 +121,9 @@ void showFlashcard(){
 }
 
 void revealFlashcard() {
-    ImGui::Button("Return to menu");
+    if(ImGui::Button("Return to menu")) {
+        currentPage = LESSON_SELECTION;
+    }
     ImGui::Text("ENGLISH");
     ImGui::Text("CHINESE");
     ImGui::Text("PYINYIN");
@@ -116,7 +138,9 @@ void showResults() {
     ImGui::Text("0/46 correct");
     if (ImGui::BeginTable("split", 2)) {
         ImGui::TableNextColumn(); ImGui::Button("Restart lesson");
-        ImGui::TableNextColumn(); ImGui::Button("Back to menu");
+        ImGui::TableNextColumn(); if(ImGui::Button("Back to menu")) {
+            currentPage = LESSON_SELECTION;
+        };
         ImGui::EndTable();
     }
 }
@@ -186,11 +210,23 @@ int main(int, char**)
 
             ImGui::Begin("Hello, world!", nullptr, window_flags);     // Create a window called "Hello, world!" and append into it.
 
-            //showLessonSelection();
-            //showFlashcardSelection();
-            //showFlashcard();
-            //revealFlashcard();
-            showResults();
+            switch (currentPage) {
+            case LESSON_SELECTION:
+                showLessonSelection();
+                break;
+            case FLASHCARD_SELECTION:
+                showFlashcardSelection();
+                break;
+            case SHOW_FLASHCARD:
+                showFlashcard();
+                break;
+            case REVEAL_FLASHCARD:
+                revealFlashcard();
+                break;
+            case SHOW_RESULTS:
+                showResults();
+                break;
+            }
 
             ImGui::End();
         }
