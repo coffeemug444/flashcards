@@ -87,7 +87,7 @@ int setup() {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
 
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
-    window = SDL_CreateWindow("Chinese Flashcards", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 500, 350, window_flags);
+    window = SDL_CreateWindow("Chinese Flashcards", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 550, 230, window_flags);
     gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     
@@ -123,7 +123,7 @@ void TextCentered(std::string text) {
     auto textWidth   = ImGui::CalcTextSize(text.c_str()).x;
 
     ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
-    ImGui::Text(text.c_str());
+    ImGui::Text("%s", text.c_str());
 }
 
 void skipInvisibleFlashcardFields() {
