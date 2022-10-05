@@ -190,7 +190,7 @@ void revealFlashcard() {
     ImGui::Text("%s", card.pinyin.c_str());
     if (ImGui::BeginTable("split", 2)) {
         ImGui::TableNextColumn(); if(ImGui::Button("Incorrect")){
-            card.correct = true;
+            card.correct = false;
             if (currentCard == flashcards.size() - 1) {
                 currentPage = SHOW_RESULTS;
             } else {
