@@ -13,10 +13,8 @@
 #include <stdio.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
-
-SDL_Window* window;
-SDL_GLContext gl_context;
-ImGuiIO* io;
+#include <string>
+#include <vector>
 
 typedef enum Page {
     LESSON_SELECTION,
@@ -26,7 +24,38 @@ typedef enum Page {
     SHOW_RESULTS
 } Page;
 
+typedef enum FlashcardField {
+    ENGLISH = 1,
+    CHINESE = 2,
+    PINYIN = 4
+} FlashcardField;
+
+typedef struct Flashcard {
+    std::string english;
+    std::string chinese;
+    std::string pinyin;
+    bool correct = false;
+} Flashcard;
+
+Flashcard testcard1 = {
+    "english 1",
+    "chinese 1",
+    "pinyin 1"
+};
+Flashcard testcard2 = {
+    "english 2",
+    "chinese 2",
+    "pinyin 2"
+};
+
+SDL_Window* window;
+SDL_GLContext gl_context;
+ImGuiIO* io;
+
 Page currentPage = LESSON_SELECTION;
+int fields = 0;
+std::vector<Flashcard> flashcards = {testcard1, testcard2};
+int currentCard = 0;
 
 int setup() {
     // Setup SDL
@@ -77,31 +106,48 @@ void cleanup() {
 }
 
 void showLessonSelection() {
-    bool wowowo = false;
+    static bool selectableLessons[18];
     if (ImGui::BeginTable("split", 3))
     {
         for (int i = 1; i <= 18; i++) {
             char lessonText[10];
             sprintf(lessonText, "Lesson %d", i);
-            ImGui::TableNextColumn(); ImGui::Checkbox(lessonText, &wowowo);
+            ImGui::TableNextColumn(); ImGui::Checkbox(lessonText, selectableLessons + (i-1));
         }
         ImGui::EndTable();
     }
     if(ImGui::Button("Next")) {
-        currentPage = FLASHCARD_SELECTION;
+        bool anythingSelected = false;
+        for (int i = 1; i <= 18; i++) {
+            anythingSelected |= selectableLessons[i-1];
+        }
+        if (anythingSelected) {
+            currentPage = FLASHCARD_SELECTION;
+        }
     }
 }
 
 void showFlashcardSelection() {
-    static bool wewewe = false;
+    static bool en = false;
+    static bool cn = false;
+    static bool py = false;
     if(ImGui::Button("Return to menu")) {
         currentPage = LESSON_SELECTION;
     }
-    ImGui::Checkbox("English", &wewewe);
-    ImGui::Checkbox("Chinese", &wewewe);
-    ImGui::Checkbox("Pinyin", &wewewe);
+    ImGui::Checkbox("English", &en);
+    ImGui::Checkbox("Chinese", &cn);
+    ImGui::Checkbox("Pinyin", &py);
     if(ImGui::Button("Next")) {
-        currentPage = SHOW_FLASHCARD;
+        fields  = 0;
+        if (en || cn || py) {
+            // user must select something to advance
+
+            if (en) fields |= ENGLISH;
+            if (cn) fields |= CHINESE;
+            if (py) fields |= PINYIN;
+            currentPage = SHOW_FLASHCARD;
+            currentCard = 0;
+        }
     }
 }
 
@@ -109,13 +155,27 @@ void showFlashcard(){
     if(ImGui::Button("Return to menu")) {
         currentPage = LESSON_SELECTION;
     }
-    ImGui::Text("ENGLISH");
-    ImGui::Text("CHINESE");
-    ImGui::Text("PYINYIN");
+    Flashcard &card = flashcards[currentCard];
+    if (fields & ENGLISH) ImGui::Text("%s", card.english.c_str());
+    if (fields & CHINESE) ImGui::Text("%s", card.chinese.c_str());
+    if (fields & PINYIN) ImGui::Text("%s", card.pinyin.c_str());
     if (ImGui::BeginTable("split", 3)) {
-        ImGui::TableNextColumn(); ImGui::Button("Previous");
-        ImGui::TableNextColumn(); ImGui::Button("Flip");
-        ImGui::TableNextColumn(); ImGui::Button("Next");
+        ImGui::TableNextColumn(); if (ImGui::Button("Previous")) {
+            if (currentCard > 0) {
+                currentCard--;
+            }
+        }
+        ImGui::TableNextColumn(); if(ImGui::Button("Flip")) {
+            currentPage = REVEAL_FLASHCARD;
+        }
+        ImGui::TableNextColumn(); if(ImGui::Button("Next")) {
+            card.correct = true;
+            if (currentCard == flashcards.size() - 1) {
+                currentPage = SHOW_RESULTS;
+            } else {
+                currentCard++;
+            }
+        }
         ImGui::EndTable();
     }
 }
@@ -124,20 +184,44 @@ void revealFlashcard() {
     if(ImGui::Button("Return to menu")) {
         currentPage = LESSON_SELECTION;
     }
-    ImGui::Text("ENGLISH");
-    ImGui::Text("CHINESE");
-    ImGui::Text("PYINYIN");
+    Flashcard &card = flashcards[currentCard];
+    ImGui::Text("%s", card.english.c_str());
+    ImGui::Text("%s", card.chinese.c_str());
+    ImGui::Text("%s", card.pinyin.c_str());
     if (ImGui::BeginTable("split", 2)) {
-        ImGui::TableNextColumn(); ImGui::Button("Incorrect");
-        ImGui::TableNextColumn(); ImGui::Button("Correct");
+        ImGui::TableNextColumn(); if(ImGui::Button("Incorrect")){
+            card.correct = true;
+            if (currentCard == flashcards.size() - 1) {
+                currentPage = SHOW_RESULTS;
+            } else {
+                currentPage = SHOW_FLASHCARD;
+                currentCard++;
+            }
+        }
+        ImGui::TableNextColumn(); if(ImGui::Button("Correct")){
+            card.correct = true;
+            if (currentCard == flashcards.size() - 1) {
+                currentPage = SHOW_RESULTS;
+            } else {
+                currentPage = SHOW_FLASHCARD;
+                currentCard++;
+            }
+        }
         ImGui::EndTable();
     }
 }
 
 void showResults() {
-    ImGui::Text("0/46 correct");
+    int numCorrect = 0;
+    for (auto& card : flashcards) {
+        numCorrect += card.correct;
+    }
+    ImGui::Text("%d/%lu correct", numCorrect, flashcards.size());
     if (ImGui::BeginTable("split", 2)) {
-        ImGui::TableNextColumn(); ImGui::Button("Restart lesson");
+        ImGui::TableNextColumn(); if(ImGui::Button("Restart lesson")) {
+            currentCard = 0;
+            currentPage = SHOW_FLASHCARD;
+        }
         ImGui::TableNextColumn(); if(ImGui::Button("Back to menu")) {
             currentPage = LESSON_SELECTION;
         };
