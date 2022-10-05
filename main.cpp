@@ -15,6 +15,13 @@
 #include <SDL2/SDL_opengl.h>
 #include <string>
 #include <vector>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+
+
+namespace fs = std::filesystem;
 
 typedef enum Page {
     LESSON_SELECTION,
@@ -53,15 +60,20 @@ SDL_GLContext gl_context;
 ImGuiIO* io;
 
 Page currentPage = LESSON_SELECTION;
+std::vector<std::vector<Flashcard>> lessons;
 int fields = 0;
-std::vector<Flashcard> flashcards = {testcard1, testcard2};
+std::vector<Flashcard> flashcards;
 int currentCard = 0;
+
+ImFont* en_large;
+ImFont* cn_large;
+float large_font_size = 48.0f;
 
 int setup() {
     // Setup SDL
     // (Some versions of SDL before <2.0.10 appears to have performance/stalling issues on a minority of Windows systems,
     // depending on whether SDL_INIT_GAMECONTROLLER is enabled or disabled.. updating to the latest version of SDL is recommended!)
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
     {
         printf("Error: %s\n", SDL_GetError());
         return -1;
@@ -83,9 +95,10 @@ int setup() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     io = &ImGui::GetIO();
-    // Setup Dear ImGui style
+    io->Fonts->AddFontFromFileTTF("fonts/Roboto-Regular.ttf", 18.0f);
+    cn_large = io->Fonts->AddFontFromFileTTF("fonts/NotoSansSC-Thin.otf", large_font_size, NULL, io->Fonts->GetGlyphRangesChineseFull());
+    io->Fonts->Build();
     ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
 
     // Setup Platform/Renderer backends
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
@@ -105,11 +118,31 @@ void cleanup() {
     SDL_Quit();
 }
 
+void TextCentered(std::string text) {
+    auto windowWidth = ImGui::GetWindowSize().x;
+    auto textWidth   = ImGui::CalcTextSize(text.c_str()).x;
+
+    ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+    ImGui::Text(text.c_str());
+}
+
+void skipInvisibleFlashcardFields() {
+    int invisibleFields = 0;
+    invisibleFields += !(fields & ENGLISH);
+    invisibleFields += !(fields & PINYIN);
+    invisibleFields += !(fields & CHINESE);
+    if (invisibleFields == 0) {
+        return;
+    }
+    float ypos = ImGui::GetCursorScreenPos().y;
+    ImGui::SetCursorPosY(ypos + invisibleFields*large_font_size);
+}
+
 void showLessonSelection() {
     static bool selectableLessons[18];
     if (ImGui::BeginTable("split", 3))
     {
-        for (int i = 1; i <= 18; i++) {
+        for (int i = 1; i <= lessons.size(); i++) {
             char lessonText[10];
             sprintf(lessonText, "Lesson %d", i);
             ImGui::TableNextColumn(); ImGui::Checkbox(lessonText, selectableLessons + (i-1));
@@ -117,11 +150,13 @@ void showLessonSelection() {
         ImGui::EndTable();
     }
     if(ImGui::Button("Next")) {
-        bool anythingSelected = false;
-        for (int i = 1; i <= 18; i++) {
-            anythingSelected |= selectableLessons[i-1];
+        flashcards.clear();
+        for (int i = 0; i <= lessons.size(); i++) {
+            if (selectableLessons[i]) {
+                flashcards.insert(end(flashcards), begin(lessons[i]), end(lessons[i]));
+            }
         }
-        if (anythingSelected) {
+        if (flashcards.size() != 0) {
             currentPage = FLASHCARD_SELECTION;
         }
     }
@@ -156,9 +191,12 @@ void showFlashcard(){
         currentPage = LESSON_SELECTION;
     }
     Flashcard &card = flashcards[currentCard];
-    if (fields & ENGLISH) ImGui::Text("%s", card.english.c_str());
-    if (fields & CHINESE) ImGui::Text("%s", card.chinese.c_str());
-    if (fields & PINYIN) ImGui::Text("%s", card.pinyin.c_str());
+    ImGui::PushFont(cn_large);
+    if (fields & ENGLISH) TextCentered(card.english);
+    if (fields & PINYIN) TextCentered(card.pinyin);
+    if (fields & CHINESE) TextCentered(card.chinese);
+    ImGui::PopFont();
+    skipInvisibleFlashcardFields();
     if (ImGui::BeginTable("split", 3)) {
         ImGui::TableNextColumn(); if (ImGui::Button("Previous")) {
             if (currentCard > 0) {
@@ -180,14 +218,18 @@ void showFlashcard(){
     }
 }
 
+
+
 void revealFlashcard() {
     if(ImGui::Button("Return to menu")) {
         currentPage = LESSON_SELECTION;
     }
     Flashcard &card = flashcards[currentCard];
-    ImGui::Text("%s", card.english.c_str());
-    ImGui::Text("%s", card.chinese.c_str());
-    ImGui::Text("%s", card.pinyin.c_str());
+    ImGui::PushFont(cn_large);
+    TextCentered(card.english);
+    TextCentered(card.pinyin);
+    TextCentered(card.chinese);
+    ImGui::PopFont();
     if (ImGui::BeginTable("split", 2)) {
         ImGui::TableNextColumn(); if(ImGui::Button("Incorrect")){
             card.correct = false;
@@ -229,6 +271,30 @@ void showResults() {
     }
 }
 
+void push_lesson(int lessonNumber) {
+    std::vector<Flashcard> lesson;
+    std::stringstream pathstream;
+    pathstream << "lessons/lesson" << lessonNumber << ".csv";
+    std::ifstream file(pathstream.str());
+    std::string line;
+    file.ignore(3); // seems to not like the first 3 bytes
+    while (std::getline(file, line)) {
+        Flashcard card;
+        std::stringstream lineStream(line);
+        std::string cell;
+        
+        std::getline(lineStream, cell, ',');
+        card.english = cell;
+        std::getline(lineStream, cell, ',');
+        card.pinyin = cell;
+        std::getline(lineStream, cell, ',');
+        card.chinese = cell;
+        lesson.push_back(card);
+    }
+
+    lessons.push_back(lesson);
+}
+
 // Main code
 int main(int, char**)
 {
@@ -236,22 +302,12 @@ int main(int, char**)
         return -1;
     }
 
-
-    // Load Fonts
-    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
-    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
-    // - If the file cannot be loaded, the function will return NULL. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
-    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
-    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype for higher quality font rendering.
-    // - Read 'docs/FONTS.md' for more instructions and details.
-    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    //io.Fonts->AddFontDefault();
-    //io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf", 18.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
-    //IM_ASSERT(font != NULL);
+    std::string path = "lessons";
+    int lessonNumber = 0;
+    for (const auto & entry : fs::directory_iterator(path)) {
+        push_lesson(++lessonNumber);
+    }
+    
 
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
